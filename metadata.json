@@ -1,0 +1,6 @@
+{
+  "name": "Visor de Datos Excel",
+  "description": "Una aplicación web rápida y ligera para visualizar y filtrar bases de datos de Excel localmente sin necesidad de servidores.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
