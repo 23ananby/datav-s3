@@ -1,7 +1,80 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { parseExcelFile, extractUniqueValues } from './utils';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
+
+function FilterableHeader({ 
+  title, 
+  columnKey, 
+  baseData, 
+  columnFilters, 
+  toggleColumnFilter, 
+  clearColumnFilter 
+}: {
+  title: string;
+  columnKey: string;
+  baseData: ProductRow[];
+  columnFilters: Record<string, Set<string>>;
+  toggleColumnFilter: (col: string, val: string) => void;
+  clearColumnFilter: (col: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const uniqueValues = useMemo(() => {
+    const vals = baseData.map(row => String(row[columnKey] ?? ''));
+    return Array.from(new Set(vals)).filter(Boolean).sort();
+  }, [baseData, columnKey]);
+  
+  const selected = columnFilters[columnKey] || new Set();
+
+  return (
+    <th className="px-4 py-3 font-medium whitespace-nowrap relative select-none">
+      <div 
+        className="flex items-center space-x-1 cursor-pointer hover:text-blue-600 inline-flex"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span>{title}</span>
+        <Filter className={`h-3.5 w-3.5 ${selected.size > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-72 flex flex-col font-normal text-gray-900 normal-case">
+            <div className="p-2 border-b border-gray-100 font-semibold text-xs text-gray-700 bg-gray-50 flex justify-between items-center rounded-t-md">
+              <span>Filtrar {title}</span>
+              {selected.size > 0 && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); clearColumnFilter(columnKey); }}
+                  className="text-blue-600 hover:underline text-xs"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+            <div className="overflow-y-auto p-2 space-y-1">
+              {uniqueValues.length === 0 ? (
+                <div className="text-gray-500 text-xs py-2 px-1">Sin valores</div>
+              ) : (
+                uniqueValues.map(val => (
+                  <label key={val} className="flex items-start space-x-2 text-sm p-1 hover:bg-gray-50 rounded cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={selected.has(val)}
+                      onChange={() => toggleColumnFilter(columnKey, val)}
+                      className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-gray-700 break-words">{val || '(Vacío)'}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </th>
+  );
+}
 
 export default function App() {
   const [data, setData] = useState<ProductRow[]>([]);
@@ -11,18 +84,35 @@ export default function App() {
 
   // Filters
   const [globalSearch, setGlobalSearch] = useState('');
-  const [selectedLinea, setSelectedLinea] = useState('');
-  const [selectedMarca, setSelectedMarca] = useState('');
-  const [selectedCategoria, setSelectedCategoria] = useState('');
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 50;
 
-  // Extracted unique values for dropdowns
-  const lineas = useMemo(() => extractUniqueValues(data, 'linea'), [data]);
-  const marcas = useMemo(() => extractUniqueValues(data, 'marca'), [data]);
-  const categorias = useMemo(() => extractUniqueValues(data, 'categoria'), [data]);
+  const toggleColumnFilter = (columnKey: string, value: string) => {
+    setColumnFilters(prev => {
+      const newFilters = { ...prev };
+      if (!newFilters[columnKey]) newFilters[columnKey] = new Set();
+      
+      const newSet = new Set(newFilters[columnKey]);
+      if (newSet.has(value)) newSet.delete(value);
+      else newSet.add(value);
+      
+      if (newSet.size === 0) delete newFilters[columnKey];
+      else newFilters[columnKey] = newSet;
+      
+      return newFilters;
+    });
+  };
+
+  const clearColumnFilter = (columnKey: string) => {
+    setColumnFilters(prev => {
+      const newFilters = { ...prev };
+      delete newFilters[columnKey];
+      return newFilters;
+    });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,32 +142,45 @@ export default function App() {
 
   const resetFilters = () => {
     setGlobalSearch('');
-    setSelectedLinea('');
-    setSelectedMarca('');
-    setSelectedCategoria('');
+    setColumnFilters({});
     setCurrentPage(1);
   };
 
-  const filteredData = useMemo(() => {
-    return data.filter((row) => {
-      // 1. Dropdown Filters
-      if (selectedLinea && row['linea'] !== selectedLinea) return false;
-      if (selectedMarca && row['marca'] !== selectedMarca) return false;
-      if (selectedCategoria && row['categoria'] !== selectedCategoria) return false;
+  const baseData = useMemo(() => {
+    if (!globalSearch.trim()) return data;
 
-      // 2. Global Text Search across all properties (multi-word match)
-      if (globalSearch.trim()) {
-        const searchTerms = globalSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).filter(Boolean);
-        const rowString = row._searchString || '';
-        
-        // Every search term must be found somewhere in the row
-        const matchesAllTerms = searchTerms.every(term => rowString.includes(term));
-        if (!matchesAllTerms) return false;
+    const searchTerms = globalSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).filter(Boolean);
+    
+    let currentMatches = [...data];
+    
+    for (const term of searchTerms) {
+      const nextMatches = currentMatches.filter(row => {
+        const searchStr = row._searchString || '';
+        return searchStr.includes(term);
+      });
+      
+      // Búsqueda inteligente: Si un término no existe en ninguna parte de los resultados restantes (ej. un error de tipeo), 
+      // lo ignoramos en vez de borrar toda la lista. Así no se pierden los resultados por una palabra extraña.
+      if (nextMatches.length > 0) {
+        currentMatches = nextMatches;
       }
+    }
+    return currentMatches;
+  }, [data, globalSearch]);
 
+  const filteredData = useMemo(() => {
+    return baseData.filter(row => {
+      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
+        if (selectedSet.size > 0) {
+          const rowVal = String(row[colKey] ?? '');
+          if (!selectedSet.has(rowVal)) {
+            return false;
+          }
+        }
+      }
       return true;
     });
-  }, [data, selectedLinea, selectedMarca, selectedCategoria, globalSearch]);
+  }, [baseData, columnFilters]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -88,7 +191,7 @@ export default function App() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [globalSearch, selectedLinea, selectedMarca, selectedCategoria]);
+  }, [globalSearch, columnFilters]);
 
   const removeFile = () => {
     setData([]);
@@ -147,63 +250,19 @@ export default function App() {
         {data.length > 0 && (
           <div className="space-y-4">
             
-            {/* Filters Box */}
-            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              {/* Global Search */}
-              <div className="lg:col-span-1 relative">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Búsqueda libre (Nombre, Tags, etc)</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <Search className="h-4 w-4 text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    value={globalSearch}
-                    onChange={(e) => setGlobalSearch(e.target.value)}
-                    className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 pl-10 pr-3 text-sm focus:border-blue-500 focus:bg-white focus:ring-blue-500 shadow-sm"
-                    placeholder='Ej. "xiaomi 8" o "celular rojo"'
-                  />
+            {/* Search Box */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Search className="h-4 w-4 text-gray-400" />
                 </div>
-              </div>
-
-              {/* Linea Dropdown */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Línea</label>
-                <select
-                  value={selectedLinea}
-                  onChange={(e) => setSelectedLinea(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 px-3 text-sm focus:border-blue-500 focus:bg-white focus:ring-blue-500 shadow-sm"
-                >
-                  <option value="">Todas las líneas</option>
-                  {lineas.map(linea => <option key={linea} value={linea}>{linea}</option>)}
-                </select>
-              </div>
-
-              {/* Marca Dropdown */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Marca</label>
-                <select
-                  value={selectedMarca}
-                  onChange={(e) => setSelectedMarca(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 px-3 text-sm focus:border-blue-500 focus:bg-white focus:ring-blue-500 shadow-sm"
-                >
-                  <option value="">Todas las marcas</option>
-                  {marcas.map(marca => <option key={marca} value={marca}>{marca}</option>)}
-                </select>
-              </div>
-
-              {/* Categoria Dropdown */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
-                <select
-                  value={selectedCategoria}
-                  onChange={(e) => setSelectedCategoria(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 bg-gray-50 py-2 px-3 text-sm focus:border-blue-500 focus:bg-white focus:ring-blue-500 shadow-sm"
-                >
-                  <option value="">Todas las categorías</option>
-                  {categorias.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+                <input
+                  type="text"
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 bg-gray-50 py-3 pl-10 pr-3 text-base focus:border-blue-500 focus:bg-white focus:ring-blue-500 shadow-sm"
+                />
               </div>
             </div>
 
@@ -238,13 +297,14 @@ export default function App() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                     <tr>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Nombre</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Línea</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Marca</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Cantidad</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Tags</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">Modelo</th>
-                      <th className="px-4 py-3 font-medium whitespace-nowrap">SKU / UPC</th>
+                      <FilterableHeader title="Nombre" columnKey="nombre" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Línea" columnKey="linea" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Marca" columnKey="marca" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Tags" columnKey="tags" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Modelo" columnKey="modelo" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="SKU" columnKey="sku" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="UPC" columnKey="upc" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
@@ -257,15 +317,13 @@ export default function App() {
                           <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-600">{row['cantidad'] ?? '-'}</td>
                           <td className="px-4 py-3 min-w-[200px] text-xs text-gray-500">{row['tags'] || '-'}</td>
                           <td className="px-4 py-3 whitespace-nowrap">{row['modelo'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-xs">
-                            SKU: {row['sku'] || '-'}<br/>
-                            UPC: {row['upc'] || '-'}
-                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-xs">{row['sku'] || '-'}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-xs">{row['upc'] || '-'}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                           No se encontraron resultados con los filtros actuales.
                         </td>
                       </tr>
