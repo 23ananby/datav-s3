@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check } from 'lucide-react';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
@@ -7,18 +7,28 @@ function FilterableHeader({
   title, 
   columnKey, 
   baseData, 
-  columnFilters, 
+  filteredData,
+  columnFilters,
+  columnSearchTags,
   toggleColumnFilter, 
-  clearColumnFilter 
+  clearColumnFilter,
+  addColumnSearchTag,
+  removeColumnSearchTag
 }: {
   title: string;
   columnKey: string;
   baseData: ProductRow[];
+  filteredData: ProductRow[];
   columnFilters: Record<string, Set<string>>;
+  columnSearchTags: Record<string, string[]>;
   toggleColumnFilter: (col: string, val: string) => void;
   clearColumnFilter: (col: string) => void;
+  addColumnSearchTag: (col: string, tag: string) => void;
+  removeColumnSearchTag: (col: string, tag: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [copied, setCopied] = useState(false);
   
   const uniqueValues = useMemo(() => {
     const vals = baseData.map(row => String(row[columnKey] ?? ''));
@@ -26,33 +36,101 @@ function FilterableHeader({
   }, [baseData, columnKey]);
   
   const selected = columnFilters[columnKey] || new Set();
+  const tags = columnSearchTags[columnKey] || [];
+  
+  const hasFilters = selected.size > 0 || tags.length > 0;
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const values = filteredData.map(row => row[columnKey]).filter(val => val != null && val !== '');
+    let textToCopy = values.join('\n');
+    
+    if (textToCopy) {
+      if (columnKey === 'nombre') {
+        textToCopy = `comparativa entre los siguientes modelos\n\n${textToCopy}`;
+      }
+      navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
-    <th className="px-4 py-3 font-medium whitespace-nowrap relative select-none">
-      <div 
-        className="flex items-center space-x-1 cursor-pointer hover:text-blue-600 inline-flex"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <span>{title}</span>
-        <Filter className={`h-3.5 w-3.5 ${selected.size > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
+    <th className="px-4 py-3 font-medium relative select-none align-top min-w-[150px]">
+      <div className="flex items-center justify-between mb-2">
+        <div 
+          className="flex items-center space-x-1 cursor-pointer hover:text-blue-600 inline-flex"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <span>{title}</span>
+          <Filter className={`h-3.5 w-3.5 ${hasFilters ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
+        </div>
+        <div className="flex items-center space-x-1">
+          <button 
+            onClick={handleCopy}
+            className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors"
+            title="Copiar lista visible"
+          >
+            {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+          </button>
+          {hasFilters && (
+            <button 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                clearColumnFilter(columnKey); 
+              }}
+              className="text-gray-400 hover:text-red-600 rounded p-1 transition-colors"
+              title="Limpiar filtros"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="font-normal text-gray-900">
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (tagInput.trim()) {
+              addColumnSearchTag(columnKey, tagInput.trim());
+              setTagInput('');
+            }
+          }}
+          className="w-full"
+        >
+          <input 
+            type="search"
+            enterKeyHint="search"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            placeholder="Filtro (+Enter)"
+            className="w-full border border-gray-300 rounded text-xs px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+          />
+        </form>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {tags.map((tag, idx) => (
+              <span key={idx} className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 leading-none max-w-full">
+                <span className="truncate" title={tag}>{tag}</span>
+                <button onClick={(e) => { e.stopPropagation(); removeColumnSearchTag(columnKey, tag); }} className="hover:text-red-600 shrink-0">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-72 flex flex-col font-normal text-gray-900 normal-case">
-            <div className="p-2 border-b border-gray-100 font-semibold text-xs text-gray-700 bg-gray-50 flex justify-between items-center rounded-t-md">
-              <span>Filtrar {title}</span>
-              {selected.size > 0 && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); clearColumnFilter(columnKey); }}
-                  className="text-blue-600 hover:underline text-xs"
-                >
-                  Limpiar
-                </button>
-              )}
+          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-96 flex flex-col font-normal text-gray-900 normal-case">
+            <div className="p-2 border-b border-gray-100 font-semibold text-xs text-gray-700 bg-gray-50 rounded-t-md">
+              <span>Filtrar valores únicos</span>
             </div>
-            <div className="overflow-y-auto p-2 space-y-1">
+
+            <div className="overflow-y-auto p-2 space-y-1 max-h-60 bg-white rounded-b-md">
               {uniqueValues.length === 0 ? (
                 <div className="text-gray-500 text-xs py-2 px-1">Sin valores</div>
               ) : (
@@ -85,6 +163,7 @@ export default function App() {
   // Filters
   const [globalSearch, setGlobalSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [columnSearchTags, setColumnSearchTags] = useState<Record<string, string[]>>({});
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -106,11 +185,35 @@ export default function App() {
     });
   };
 
+  const addColumnSearchTag = (columnKey: string, tag: string) => {
+    setColumnSearchTags(prev => {
+      const newTags = prev[columnKey] ? [...prev[columnKey]] : [];
+      if (!newTags.includes(tag)) {
+        newTags.push(tag);
+      }
+      return { ...prev, [columnKey]: newTags };
+    });
+  };
+
+  const removeColumnSearchTag = (columnKey: string, tag: string) => {
+    setColumnSearchTags(prev => {
+      const newTags = (prev[columnKey] || []).filter(t => t !== tag);
+      const newState = { ...prev, [columnKey]: newTags };
+      if (newTags.length === 0) delete newState[columnKey];
+      return newState;
+    });
+  };
+
   const clearColumnFilter = (columnKey: string) => {
     setColumnFilters(prev => {
       const newFilters = { ...prev };
       delete newFilters[columnKey];
       return newFilters;
+    });
+    setColumnSearchTags(prev => {
+      const newTags = { ...prev };
+      delete newTags[columnKey];
+      return newTags;
     });
   };
 
@@ -143,6 +246,13 @@ export default function App() {
   const resetFilters = () => {
     setGlobalSearch('');
     setColumnFilters({});
+    setColumnSearchTags({});
+    setCurrentPage(1);
+  };
+
+  const resetColumnFilters = () => {
+    setColumnFilters({});
+    setColumnSearchTags({});
     setCurrentPage(1);
   };
 
@@ -178,9 +288,22 @@ export default function App() {
           }
         }
       }
+      
+      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
+        if (tags.length > 0) {
+          const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          for (const tag of tags) {
+            const normalizedTag = tag.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (!rowVal.includes(normalizedTag)) {
+              return false;
+            }
+          }
+        }
+      }
+      
       return true;
     });
-  }, [baseData, columnFilters]);
+  }, [baseData, columnFilters, columnSearchTags]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -191,7 +314,7 @@ export default function App() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [globalSearch, columnFilters]);
+  }, [globalSearch, columnFilters, columnSearchTags]);
 
   const removeFile = () => {
     setData([]);
@@ -270,25 +393,38 @@ export default function App() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-gray-600">
               <p>Mostrando {filteredData.length} resultados de {data.length}</p>
               
-              {totalPages > 1 && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="p-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50"
+              <div className="flex items-center space-x-4">
+                {(Object.keys(columnFilters).length > 0 || Object.keys(columnSearchTags).length > 0) && (
+                  <button 
+                    onClick={resetColumnFilters}
+                    className="flex items-center space-x-1 text-gray-500 hover:text-red-600 transition-colors bg-white px-2 py-1 rounded border border-gray-200 shadow-sm"
+                    title="Restablecer filtros de columnas"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Limpiar filtros de columna</span>
                   </button>
-                  <span className="px-2">Página {currentPage} de {totalPages}</span>
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="p-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                )}
+                
+                {totalPages > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className="p-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="px-2">Página {currentPage} de {totalPages}</span>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className="p-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Data Table */}
@@ -297,14 +433,14 @@ export default function App() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                     <tr>
-                      <FilterableHeader title="Nombre" columnKey="nombre" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="Línea" columnKey="linea" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="Marca" columnKey="marca" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="Tags" columnKey="tags" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="Modelo" columnKey="modelo" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="SKU" columnKey="sku" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
-                      <FilterableHeader title="UPC" columnKey="upc" baseData={baseData} columnFilters={columnFilters} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} />
+                      <FilterableHeader title="Nombre" columnKey="nombre" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Línea" columnKey="linea" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Marca" columnKey="marca" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Tags" columnKey="tags" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Modelo" columnKey="modelo" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="SKU" columnKey="sku" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="UPC" columnKey="upc" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
