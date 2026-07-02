@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse } from 'lucide-react';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
 function FilterableHeader({ 
   title, 
   columnKey, 
-  baseData, 
   filteredData,
   columnFilters,
   columnSearchTags,
+  facetCounts,
   toggleColumnFilter, 
   clearColumnFilter,
   addColumnSearchTag,
@@ -17,10 +17,10 @@ function FilterableHeader({
 }: {
   title: string;
   columnKey: string;
-  baseData: ProductRow[];
   filteredData: ProductRow[];
   columnFilters: Record<string, Set<string>>;
   columnSearchTags: Record<string, string[]>;
+  facetCounts: Record<string, number>;
   toggleColumnFilter: (col: string, val: string) => void;
   clearColumnFilter: (col: string) => void;
   addColumnSearchTag: (col: string, tag: string) => void;
@@ -30,13 +30,14 @@ function FilterableHeader({
   const [tagInput, setTagInput] = useState('');
   const [copied, setCopied] = useState(false);
   
-  const uniqueValues = useMemo(() => {
-    const vals = baseData.map(row => String(row[columnKey] ?? ''));
-    return Array.from(new Set(vals)).filter(Boolean).sort();
-  }, [baseData, columnKey]);
-  
   const selected = columnFilters[columnKey] || new Set();
   const tags = columnSearchTags[columnKey] || [];
+  
+  const uniqueValues = useMemo(() => {
+    const counts = facetCounts || {};
+    const vals = new Set([...Object.keys(counts), ...Array.from(selected)]);
+    return Array.from(vals).filter(Boolean).sort();
+  }, [facetCounts, selected]);
   
   const hasFilters = selected.size > 0 || tags.length > 0;
 
@@ -142,7 +143,10 @@ function FilterableHeader({
                       onChange={() => toggleColumnFilter(columnKey, val)}
                       className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-gray-700 break-words">{val || '(Vacío)'}</span>
+                    <span className="text-gray-700 break-words flex-1">{val || '(Vacío)'}</span>
+                    <span className="text-gray-400 text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full font-medium">
+                      {facetCounts?.[val] || 0}
+                    </span>
                   </label>
                 ))
               )}
@@ -158,12 +162,18 @@ export default function App() {
   const [data, setData] = useState<ProductRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [isParsing, setIsParsing] = useState(false);
+  
+  const [auxData, setAuxData] = useState<ProductRow[]>([]);
+  const [auxFileName, setAuxFileName] = useState<string>('');
+  const [isParsingAux, setIsParsingAux] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [globalSearch, setGlobalSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   const [columnSearchTags, setColumnSearchTags] = useState<Record<string, string[]>>({});
+  const [locationFilter, setLocationFilter] = useState<'all' | 'exhibited' | 'bodega'>('all');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -243,6 +253,49 @@ export default function App() {
     }
   };
 
+  const handleAuxFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx')) {
+      setError('Por favor sube un archivo .xlsx válido para la base auxiliar.');
+      return;
+    }
+
+    setIsParsingAux(true);
+    setError(null);
+    setAuxFileName(file.name);
+
+    try {
+      const parsedData = await parseExcelFile(file);
+      setAuxData(parsedData);
+    } catch (err) {
+      console.error(err);
+      setError('Hubo un error al procesar el archivo auxiliar.');
+      setAuxData([]);
+    } finally {
+      setIsParsingAux(false);
+    }
+  };
+
+  const removeAuxFile = () => {
+    setAuxData([]);
+    setAuxFileName('');
+  };
+
+  const exhibitedSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of auxData) {
+      const sku = String(row['sku'] ?? '').trim().toLowerCase();
+      const linea = String(row['linea'] ?? '').trim().toLowerCase();
+      const marca = String(row['marca'] ?? '').trim().toLowerCase();
+      if (sku || linea || marca) {
+        set.add(`${sku}|${linea}|${marca}`);
+      }
+    }
+    return set;
+  }, [auxData]);
+
   const resetFilters = () => {
     setGlobalSearch('');
     setColumnFilters({});
@@ -280,6 +333,27 @@ export default function App() {
 
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
+      if (locationFilter !== 'all') {
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        if (locationFilter === 'exhibited' && !isExhibited) return false;
+        if (locationFilter === 'bodega' && isExhibited) return false;
+      }
+
+      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
+        if (tags.length > 0) {
+          const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          let tagMatched = false;
+          for (const tag of tags) {
+            const normalizedTag = tag.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (rowVal.includes(normalizedTag)) {
+              tagMatched = true;
+              break;
+            }
+          }
+          if (!tagMatched) return false;
+        }
+      }
+
       for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
         if (selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
@@ -289,21 +363,67 @@ export default function App() {
         }
       }
       
+      return true;
+    });
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet]);
+
+  const facetCounts = useMemo(() => {
+    const counts: Record<string, Record<string, number>> = {
+      nombre: {}, linea: {}, marca: {}, cantidad: {}, tags: {}, modelo: {}, sku: {}, upc: {}
+    };
+
+    for (const row of baseData) {
+      let passesLocation = true;
+      if (locationFilter !== 'all') {
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        if (locationFilter === 'exhibited' && !isExhibited) passesLocation = false;
+        if (locationFilter === 'bodega' && isExhibited) passesLocation = false;
+      }
+
+      let passesTags = true;
       for (const [colKey, tags] of Object.entries(columnSearchTags)) {
         if (tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          let tagMatched = false;
           for (const tag of tags) {
             const normalizedTag = tag.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            if (!rowVal.includes(normalizedTag)) {
-              return false;
+            if (rowVal.includes(normalizedTag)) {
+              tagMatched = true;
+              break;
             }
+          }
+          if (!tagMatched) {
+            passesTags = false;
+            break;
           }
         }
       }
-      
-      return true;
-    });
-  }, [baseData, columnFilters, columnSearchTags]);
+
+      if (!passesLocation || !passesTags) continue;
+
+      const failedCheckboxes = [];
+      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
+        if (selectedSet.size > 0) {
+          const rowVal = String(row[colKey] ?? '');
+          if (!selectedSet.has(rowVal)) {
+            failedCheckboxes.push(colKey);
+          }
+        }
+      }
+
+      const columns = ['nombre', 'linea', 'marca', 'cantidad', 'tags', 'modelo', 'sku', 'upc'];
+      for (const col of columns) {
+        if (failedCheckboxes.length === 0 || (failedCheckboxes.length === 1 && failedCheckboxes[0] === col)) {
+          const val = String(row[col] ?? '');
+          if (val) {
+            counts[col][val] = (counts[col][val] || 0) + 1;
+          }
+        }
+      }
+    }
+
+    return counts;
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -333,34 +453,70 @@ export default function App() {
             <p className="text-sm text-gray-500 mt-1">Busca y filtra tus productos fácilmente.</p>
           </div>
 
-          {/* Upload Area */}
-          {!data.length && !isParsing && (
-            <label className="relative flex cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-white px-6 py-4 hover:border-gray-400 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center space-x-2">
-                <UploadCloud className="h-5 w-5 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">Subir archivo .xlsx</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Main Upload Area */}
+            {!data.length && !isParsing && (
+              <label className="relative flex cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-white px-6 py-3 hover:border-gray-400 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center space-x-2">
+                  <UploadCloud className="h-5 w-5 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Subir General (.xlsx)</span>
+                </div>
+                <input type="file" accept=".xlsx" className="sr-only" onChange={handleFileUpload} />
+              </label>
+            )}
+
+            {isParsing && (
+              <div className="flex items-center space-x-2 px-6 py-3 bg-white rounded-md border border-gray-200 shadow-sm">
+                <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
+                <span className="text-sm text-gray-600">Procesando General...</span>
               </div>
-              <input type="file" accept=".xlsx" className="sr-only" onChange={handleFileUpload} />
-            </label>
-          )}
+            )}
 
-          {isParsing && (
-            <div className="flex items-center space-x-2 px-6 py-4 bg-white rounded-md border border-gray-200 shadow-sm">
-              <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
-              <span className="text-sm text-gray-600">Procesando archivo...</span>
-            </div>
-          )}
+            {data.length > 0 && (
+              <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm">
+                <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">General</span>
+                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{fileName}</span>
+                </div>
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600">{data.length} filas</span>
+                <button onClick={removeFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar base general">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
 
-          {data.length > 0 && (
-            <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm">
-              <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-              <span className="text-sm font-medium text-gray-700 truncate max-w-[200px]">{fileName}</span>
-              <span className="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600">{data.length} filas</span>
-              <button onClick={removeFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+            {/* Aux Upload Area */}
+            {data.length > 0 && !auxData.length && !isParsingAux && (
+              <label className="relative flex cursor-pointer items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 hover:bg-gray-50 transition-colors shadow-sm">
+                <div className="flex items-center space-x-2">
+                  <Store className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Subir Exhibición</span>
+                </div>
+                <input type="file" accept=".xlsx" className="sr-only" onChange={handleAuxFileUpload} />
+              </label>
+            )}
+
+            {isParsingAux && (
+              <div className="flex items-center space-x-2 px-4 py-2 bg-white rounded-md border border-gray-200 shadow-sm">
+                <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
+                <span className="text-sm text-gray-600">Procesando...</span>
+              </div>
+            )}
+
+            {auxData.length > 0 && (
+              <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
+                <Store className="h-5 w-5 text-blue-500" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">Exhibición</span>
+                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{auxFileName}</span>
+                </div>
+                <button onClick={removeAuxFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar base de exhibición">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
         </header>
 
         {error && (
@@ -394,6 +550,23 @@ export default function App() {
               <p>Mostrando {filteredData.length} resultados de {data.length}</p>
               
               <div className="flex items-center space-x-4">
+                <div className="flex bg-white rounded border border-gray-200 shadow-sm p-0.5">
+                  <button
+                    onClick={() => setLocationFilter(prev => prev === 'exhibited' ? 'all' : 'exhibited')}
+                    className={`p-1 rounded flex items-center justify-center transition-colors ${locationFilter === 'exhibited' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="Mostrar solo exhibidos"
+                  >
+                    <Store className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setLocationFilter(prev => prev === 'bodega' ? 'all' : 'bodega')}
+                    className={`p-1 rounded flex items-center justify-center transition-colors ${locationFilter === 'bodega' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="Mostrar solo en bodega"
+                  >
+                    <Warehouse className="h-4 w-4" />
+                  </button>
+                </div>
+
                 {(Object.keys(columnFilters).length > 0 || Object.keys(columnSearchTags).length > 0) && (
                   <button 
                     onClick={resetColumnFilters}
@@ -433,30 +606,43 @@ export default function App() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                     <tr>
-                      <FilterableHeader title="Nombre" columnKey="nombre" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Línea" columnKey="linea" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Marca" columnKey="marca" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Tags" columnKey="tags" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Modelo" columnKey="modelo" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="SKU" columnKey="sku" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="UPC" columnKey="upc" baseData={baseData} filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {currentData.length > 0 ? (
-                      currentData.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">{row['nombre'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{row['linea'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{row['marca'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-600">{row['cantidad'] ?? '-'}</td>
-                          <td className="px-4 py-3 min-w-[200px] text-xs text-gray-500">{row['tags'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{row['modelo'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-xs">{row['sku'] || '-'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-xs">{row['upc'] || '-'}</td>
-                        </tr>
-                      ))
+                      currentData.map((row, idx) => {
+                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+                        
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">
+                              <div className="flex items-center space-x-2">
+                                <span>{row['nombre'] || '-'}</span>
+                                {isExhibited ? (
+                                  <Store className="h-4 w-4 text-blue-600 shrink-0" title="En exhibición en tienda" />
+                                ) : (
+                                  <Warehouse className="h-4 w-4 text-amber-600 shrink-0" title="En bodega" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">{row['linea'] || '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{row['marca'] || '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-600">{row['cantidad'] ?? '-'}</td>
+                            <td className="px-4 py-3 min-w-[200px] text-xs text-gray-500">{row['tags'] || '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{row['modelo'] || '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-xs">{row['sku'] || '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-xs">{row['upc'] || '-'}</td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
