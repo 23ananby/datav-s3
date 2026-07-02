@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink } from 'lucide-react';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
@@ -56,6 +56,18 @@ function FilterableHeader({
     }
   };
 
+  const handleSearch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const values = filteredData.map(row => row[columnKey]).filter(val => val != null && val !== '');
+    let textToSearch = values.join('\n');
+    
+    if (textToSearch && columnKey === 'nombre') {
+      textToSearch = `comparativa entre los siguientes modelos\n\n${textToSearch}`;
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(textToSearch)}`;
+      window.open(searchUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <th className="px-4 py-3 font-medium relative select-none align-top min-w-[150px]">
       <div className="flex items-center justify-between mb-2">
@@ -67,6 +79,15 @@ function FilterableHeader({
           <Filter className={`h-3.5 w-3.5 ${hasFilters ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
         </div>
         <div className="flex items-center space-x-1">
+          {columnKey === 'nombre' && (
+            <button 
+              onClick={handleSearch}
+              className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors"
+              title="Buscar lista en Google"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </button>
+          )}
           <button 
             onClick={handleCopy}
             className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors"
