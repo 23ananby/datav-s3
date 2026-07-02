@@ -642,8 +642,21 @@ export default function App() {
                       currentData.map((row, idx) => {
                         const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
                         
+                        const cantidadRaw = row['cantidad'];
+                        const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
+                        const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
+                        
+                        let rowColorClass = 'hover:bg-gray-50';
+                        if (cantidadVal > 1) {
+                          rowColorClass = 'bg-emerald-50/60 hover:bg-emerald-100/60';
+                        } else if (cantidadVal === 1) {
+                          rowColorClass = 'bg-amber-50/60 hover:bg-amber-100/60';
+                        } else {
+                          rowColorClass = 'bg-red-50/60 hover:bg-red-100/60';
+                        }
+                        
                         return (
-                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <tr key={idx} className={`transition-colors ${rowColorClass}`}>
                             <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">
                               <div className="flex items-center space-x-2">
                                 <span>{row['nombre'] || '-'}</span>
