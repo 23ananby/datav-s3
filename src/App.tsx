@@ -13,7 +13,9 @@ function FilterableHeader({
   toggleColumnFilter, 
   clearColumnFilter,
   addColumnSearchTag,
-  removeColumnSearchTag
+  removeColumnSearchTag,
+  cantidadColorFilter,
+  setCantidadColorFilter
 }: {
   title: string;
   columnKey: string;
@@ -25,6 +27,8 @@ function FilterableHeader({
   clearColumnFilter: (col: string) => void;
   addColumnSearchTag: (col: string, tag: string) => void;
   removeColumnSearchTag: (col: string, tag: string) => void;
+  cantidadColorFilter?: 'all' | 'green' | 'yellow' | 'red';
+  setCantidadColorFilter?: (val: 'all' | 'green' | 'yellow' | 'red') => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -68,6 +72,23 @@ function FilterableHeader({
     }
   };
 
+  const handleCantidadColorToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!setCantidadColorFilter) return;
+    
+    if (cantidadColorFilter === 'all') setCantidadColorFilter('green');
+    else if (cantidadColorFilter === 'green') setCantidadColorFilter('yellow');
+    else if (cantidadColorFilter === 'yellow') setCantidadColorFilter('red');
+    else setCantidadColorFilter('all');
+  };
+
+  const getCircleColor = () => {
+    if (cantidadColorFilter === 'green') return 'bg-emerald-500';
+    if (cantidadColorFilter === 'yellow') return 'bg-amber-400';
+    if (cantidadColorFilter === 'red') return 'bg-red-500';
+    return 'bg-gradient-to-tr from-emerald-500 via-amber-400 to-red-500';
+  };
+
   return (
     <th className="px-4 py-3 font-medium relative select-none align-top min-w-[150px]">
       <div className="flex items-center justify-between mb-2">
@@ -79,6 +100,15 @@ function FilterableHeader({
           <Filter className={`h-3.5 w-3.5 ${hasFilters ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
         </div>
         <div className="flex items-center space-x-1">
+          {columnKey === 'cantidad' && setCantidadColorFilter && (
+            <button
+              onClick={handleCantidadColorToggle}
+              className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors flex items-center justify-center"
+              title="Filtrar por estado de cantidad"
+            >
+              <div className={`h-3.5 w-3.5 rounded-full ${getCircleColor()}`}></div>
+            </button>
+          )}
           {columnKey === 'nombre' && (
             <button 
               onClick={handleSearch}
@@ -195,6 +225,7 @@ export default function App() {
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   const [columnSearchTags, setColumnSearchTags] = useState<Record<string, string[]>>({});
   const [locationFilter, setLocationFilter] = useState<'all' | 'exhibited' | 'bodega'>('all');
+  const [cantidadColorFilter, setCantidadColorFilter] = useState<'all' | 'green' | 'yellow' | 'red'>('all');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -384,9 +415,19 @@ export default function App() {
         }
       }
       
+      if (cantidadColorFilter !== 'all') {
+        const cantidadRaw = row['cantidad'];
+        const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
+        const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
+        
+        if (cantidadColorFilter === 'green' && cantidadVal <= 1) return false;
+        if (cantidadColorFilter === 'yellow' && cantidadVal !== 1) return false;
+        if (cantidadColorFilter === 'red' && cantidadVal >= 1) return false;
+      }
+
       return true;
     });
-  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet]);
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter]);
 
   const facetCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {
@@ -422,6 +463,16 @@ export default function App() {
 
       if (!passesLocation || !passesTags) continue;
 
+      if (cantidadColorFilter !== 'all') {
+        const cantidadRaw = row['cantidad'];
+        const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
+        const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
+        
+        if (cantidadColorFilter === 'green' && cantidadVal <= 1) continue;
+        if (cantidadColorFilter === 'yellow' && cantidadVal !== 1) continue;
+        if (cantidadColorFilter === 'red' && cantidadVal >= 1) continue;
+      }
+
       const failedCheckboxes = [];
       for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
         if (selectedSet.size > 0) {
@@ -444,7 +495,7 @@ export default function App() {
     }
 
     return counts;
-  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet]);
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -630,7 +681,7 @@ export default function App() {
                       <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                       <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                       <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} />
                       <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                       <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
                       <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
