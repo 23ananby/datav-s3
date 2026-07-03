@@ -48,7 +48,7 @@ function FilterableHeader({
     
     if (textToCopy) {
       if (columnKey === 'nombre') {
-        textToCopy = `comparativa entre los siguientes modelos\n\n${textToCopy}`;
+        textToCopy = `comparativa de características y precio entre los siguientes modelos\n\n${textToCopy}`;
       }
       navigator.clipboard.writeText(textToCopy);
       setCopied(true);
@@ -62,7 +62,7 @@ function FilterableHeader({
     let textToSearch = values.join('\n');
     
     if (textToSearch && columnKey === 'nombre') {
-      textToSearch = `comparativa entre los siguientes modelos\n\n${textToSearch}`;
+      textToSearch = `comparativa de características y precio entre los siguientes modelos\n\n${textToSearch}`;
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(textToSearch)}`;
       window.open(searchUrl, '_blank', 'noopener,noreferrer');
     }
