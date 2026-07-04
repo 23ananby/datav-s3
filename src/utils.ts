@@ -5,7 +5,7 @@ const normalizeKey = (key: string) => {
   return key.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 };
 
-export const parseExcelFile = (file: File): Promise<ProductRow[]> => {
+export const parseExcelFile = (file: File, skipFirstRow: boolean = false): Promise<ProductRow[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -25,10 +25,10 @@ export const parseExcelFile = (file: File): Promise<ProductRow[]> => {
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
           
-          // Skip the first row unconditionally, assuming the second row contains the column headers
+          // Skip the first row if skipFirstRow is true
           const sheetData = XLSX.utils.sheet_to_json<any>(worksheet, { 
             defval: '',
-            range: 1
+            range: skipFirstRow ? 1 : 0
           });
           
           if (sheetData.length > 0) {

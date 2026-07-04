@@ -293,7 +293,7 @@ export default function App() {
     setFileName(file.name);
 
     try {
-      const parsedData = await parseExcelFile(file);
+      const parsedData = await parseExcelFile(file, true);
       setData(parsedData);
       resetFilters();
     } catch (err) {
