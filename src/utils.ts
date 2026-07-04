@@ -24,7 +24,13 @@ export const parseExcelFile = (file: File): Promise<ProductRow[]> => {
         // Find the first sheet that actually has data
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
-          const sheetData = XLSX.utils.sheet_to_json<any>(worksheet, { defval: '' });
+          
+          // Skip the first row unconditionally, assuming the second row contains the column headers
+          const sheetData = XLSX.utils.sheet_to_json<any>(worksheet, { 
+            defval: '',
+            range: 1
+          });
+          
           if (sheetData.length > 0) {
             jsonData = sheetData;
             break;
