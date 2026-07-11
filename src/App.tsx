@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
@@ -33,6 +33,8 @@ function FilterableHeader({
   const [isOpen, setIsOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [actionPrefixText, setActionPrefixText] = useState('');
   
   const selected = columnFilters[columnKey] || new Set();
   const tags = columnSearchTags[columnKey] || [];
@@ -51,12 +53,13 @@ function FilterableHeader({
     let textToCopy = values.join('\n');
     
     if (textToCopy) {
-      if (columnKey === 'nombre') {
-        textToCopy = `comparativa de características y precio entre los siguientes modelos\n\n${textToCopy}`;
+      if (columnKey === 'nombre' && actionPrefixText.trim()) {
+        textToCopy = `${actionPrefixText.trim()}\n\n${textToCopy}`;
       }
       navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      setShowActionMenu(false);
     }
   };
 
@@ -66,9 +69,12 @@ function FilterableHeader({
     let textToSearch = values.join('\n');
     
     if (textToSearch && columnKey === 'nombre') {
-      textToSearch = `comparativa de características y precio entre los siguientes modelos\n\n${textToSearch}`;
+      if (actionPrefixText.trim()) {
+        textToSearch = `${actionPrefixText.trim()}\n\n${textToSearch}`;
+      }
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(textToSearch)}`;
       window.open(searchUrl, '_blank', 'noopener,noreferrer');
+      setShowActionMenu(false);
     }
   };
 
@@ -109,22 +115,56 @@ function FilterableHeader({
               <div className={`h-3.5 w-3.5 rounded-full ${getCircleColor()}`}></div>
             </button>
           )}
-          {columnKey === 'nombre' && (
+          {columnKey === 'nombre' ? (
+            <div className="relative">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setShowActionMenu(!showActionMenu); }}
+                className={`rounded p-1 transition-colors ${showActionMenu ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600'}`}
+                title="Opciones de exportación"
+              >
+                {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Share className="h-4 w-4" />}
+              </button>
+              {showActionMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); }}></div>
+                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-xl rounded-md z-20 flex flex-col font-normal text-gray-900 normal-case cursor-default p-3" onClick={(e) => e.stopPropagation()}>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Texto inicial (opcional)</label>
+                    <textarea 
+                      value={actionPrefixText}
+                      onChange={(e) => setActionPrefixText(e.target.value)}
+                      placeholder="Ej: comparativa de modelos..."
+                      className="w-full border border-gray-300 rounded text-xs p-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm resize-none"
+                      rows={2}
+                    />
+                    <div className="flex gap-2 mt-3">
+                      <button 
+                        onClick={handleCopy}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 font-medium"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copiar
+                      </button>
+                      <button 
+                        onClick={handleSearch}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 font-medium"
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        Buscar
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
             <button 
-              onClick={handleSearch}
+              onClick={handleCopy}
               className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors"
-              title="Buscar lista en Google"
+              title="Copiar lista visible"
             >
-              <ExternalLink className="h-4 w-4" />
+              {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
             </button>
           )}
-          <button 
-            onClick={handleCopy}
-            className="text-gray-400 hover:text-blue-600 rounded p-1 transition-colors"
-            title="Copiar lista visible"
-          >
-            {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-          </button>
           {hasFilters && (
             <button 
               onClick={(e) => { 
