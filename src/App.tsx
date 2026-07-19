@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
+import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
@@ -253,6 +254,7 @@ export default function App() {
   const [data, setData] = useState<ProductRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [isParsing, setIsParsing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(true);
   
   const [auxData, setAuxData] = useState<ProductRow[]>([]);
   const [auxFileName, setAuxFileName] = useState<string>('');
@@ -270,6 +272,33 @@ export default function App() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 50;
+
+  useEffect(() => {
+    const restoreState = async () => {
+      try {
+        const storedData = await get('app-data');
+        const storedFileName = await get('app-fileName');
+        const storedAuxData = await get('app-auxData');
+        const storedAuxFileName = await get('app-auxFileName');
+        
+        if (storedData && storedFileName) {
+          setData(storedData);
+          setFileName(storedFileName);
+        }
+        
+        if (storedAuxData && storedAuxFileName) {
+          setAuxData(storedAuxData);
+          setAuxFileName(storedAuxFileName);
+        }
+      } catch (error) {
+        console.error('Failed to restore from IndexedDB', error);
+      } finally {
+        setIsRestoring(false);
+      }
+    };
+    
+    restoreState();
+  }, []);
 
   const toggleColumnFilter = (columnKey: string, value: string) => {
     setColumnFilters(prev => {
@@ -335,6 +364,8 @@ export default function App() {
     try {
       const parsedData = await parseExcelFile(file, true);
       setData(parsedData);
+      set('app-data', parsedData).catch(console.error);
+      set('app-fileName', file.name).catch(console.error);
       resetFilters();
     } catch (err) {
       console.error(err);
@@ -361,6 +392,8 @@ export default function App() {
     try {
       const parsedData = await parseExcelFile(file);
       setAuxData(parsedData);
+      set('app-auxData', parsedData).catch(console.error);
+      set('app-auxFileName', file.name).catch(console.error);
     } catch (err) {
       console.error(err);
       setError('Hubo un error al procesar el archivo auxiliar.');
@@ -373,6 +406,8 @@ export default function App() {
   const removeAuxFile = () => {
     setAuxData([]);
     setAuxFileName('');
+    del('app-auxData').catch(console.error);
+    del('app-auxFileName').catch(console.error);
   };
 
   const exhibitedSet = useMemo(() => {
@@ -551,8 +586,21 @@ export default function App() {
   const removeFile = () => {
     setData([]);
     setFileName('');
+    del('app-data').catch(console.error);
+    del('app-fileName').catch(console.error);
     resetFilters();
   };
+
+  if (isRestoring) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 rounded-full border-4 border-gray-200 border-t-blue-600 animate-spin" />
+          <p className="text-gray-500 font-medium">Cargando base de datos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-6 lg:p-8">
