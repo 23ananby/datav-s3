@@ -798,6 +798,18 @@ export default function App() {
                           <tr key={idx} className={`transition-colors ${rowColorClass}`}>
                             <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">
                               <div className="flex items-center space-x-2">
+                                {row['nombre'] && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`https://www.google.com/search?q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
+                                    }}
+                                    className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
+                                    title="Buscar producto en Google"
+                                  >
+                                    <Search className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
                                 <span>{row['nombre'] || '-'}</span>
                                 {isExhibited ? (
                                   <Store className="h-4 w-4 text-blue-600 shrink-0" title="En exhibición en tienda" />
