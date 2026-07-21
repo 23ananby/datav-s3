@@ -444,10 +444,9 @@ export default function App() {
     const set = new Set<string>();
     for (const row of auxData) {
       const sku = String(row['sku'] ?? '').trim().toLowerCase();
-      const linea = String(row['linea'] ?? '').trim().toLowerCase();
       const marca = String(row['marca'] ?? '').trim().toLowerCase();
-      if (sku || linea || marca) {
-        set.add(`${sku}|${linea}|${marca}`);
+      if (sku || marca) {
+        set.add(`${sku}|${marca}`);
       }
     }
     return set;
@@ -491,7 +490,7 @@ export default function App() {
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
       if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
         if (locationFilter === 'exhibited' && !isExhibited) return false;
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
@@ -542,7 +541,7 @@ export default function App() {
     for (const row of baseData) {
       let passesLocation = true;
       if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
         if (locationFilter === 'exhibited' && !isExhibited) passesLocation = false;
         if (locationFilter === 'bodega' && isExhibited) passesLocation = false;
       }
@@ -809,7 +808,7 @@ export default function App() {
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {currentData.length > 0 ? (
                       currentData.map((row, idx) => {
-                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
                         
                         const cantidadRaw = row['cantidad'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
