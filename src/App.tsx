@@ -443,15 +443,33 @@ export default function App() {
   const exhibitedSet = useMemo(() => {
     const set = new Set<string>();
     for (const row of auxData) {
-      const sku = String(row['sku'] ?? '').trim().toLowerCase();
-      const linea = String(row['linea'] ?? '').trim().toLowerCase();
-      const marca = String(row['marca'] ?? '').trim().toLowerCase();
-      if (sku || linea || marca) {
-        set.add(`${sku}|${linea}|${marca}`);
+      for (const key in row) {
+        if (key !== '_searchString') {
+          const val = String(row[key] ?? '').trim().toLowerCase();
+          if (val) set.add(val);
+        }
       }
     }
     return set;
   }, [auxData]);
+
+  const checkIsExhibited = useCallback((row: ProductRow) => {
+    if (exhibitedSet.size === 0) return false;
+    
+    const sku = String(row['sku'] ?? '').trim().toLowerCase();
+    const modelo = String(row['modelo'] ?? '').trim().toLowerCase();
+    const upc = String(row['upc'] ?? '').trim().toLowerCase();
+    const marca = String(row['marca'] ?? '').trim().toLowerCase();
+    const linea = String(row['linea'] ?? '').trim().toLowerCase();
+    
+    if (sku && exhibitedSet.has(sku)) return true;
+    if (modelo && exhibitedSet.has(modelo)) return true;
+    if (upc && exhibitedSet.has(upc)) return true;
+    if (marca && exhibitedSet.has(marca)) return true;
+    if (linea && exhibitedSet.has(linea)) return true;
+    
+    return false;
+  }, [exhibitedSet]);
 
   const resetFilters = () => {
     setGlobalSearch('');
@@ -491,7 +509,7 @@ export default function App() {
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
       if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        const isExhibited = checkIsExhibited(row);
         if (locationFilter === 'exhibited' && !isExhibited) return false;
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
@@ -542,7 +560,7 @@ export default function App() {
     for (const row of baseData) {
       let passesLocation = true;
       if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        const isExhibited = checkIsExhibited(row);
         if (locationFilter === 'exhibited' && !isExhibited) passesLocation = false;
         if (locationFilter === 'bodega' && isExhibited) passesLocation = false;
       }
@@ -809,7 +827,7 @@ export default function App() {
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {currentData.length > 0 ? (
                       currentData.map((row, idx) => {
-                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+                        const isExhibited = checkIsExhibited(row);
                         
                         const cantidadRaw = row['cantidad'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
