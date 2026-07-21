@@ -33,6 +33,7 @@ function FilterableHeader({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [actionPrefixText, setActionPrefixText] = useState('');
@@ -182,25 +183,54 @@ function FilterableHeader({
       </div>
 
       <div className="font-normal text-gray-900">
-        <form 
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (tagInput.trim()) {
-              addColumnSearchTag(columnKey, tagInput.trim());
-              setTagInput('');
-            }
-          }}
-          className="w-full"
-        >
-          <input 
-            type="search"
-            enterKeyHint="search"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            placeholder="Filtro (+Enter)"
-            className="w-full border border-gray-300 rounded text-xs px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-          />
-        </form>
+        <div className="relative">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (tagInput.trim()) {
+                addColumnSearchTag(columnKey, tagInput.trim());
+                setTagInput('');
+                setShowSuggestions(false);
+              }
+            }}
+            className="w-full"
+          >
+            <input 
+              type="search"
+              enterKeyHint="search"
+              value={tagInput}
+              onChange={(e) => {
+                setTagInput(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="Filtro (+Enter)"
+              className="w-full border border-gray-300 rounded text-xs px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+            />
+          </form>
+          {showSuggestions && tagInput.trim() && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-30 max-h-40 overflow-y-auto">
+              {uniqueValues
+                .filter(v => v.toLowerCase().startsWith(tagInput.trim().toLowerCase()) && v.toLowerCase() !== tagInput.trim().toLowerCase())
+                .slice(0, 10)
+                .map((v, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 focus:bg-gray-100 truncate"
+                    onClick={() => {
+                      setTagInput('');
+                      addColumnSearchTag(columnKey, v);
+                      setShowSuggestions(false);
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {tags.map((tag, idx) => (
