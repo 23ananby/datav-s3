@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
@@ -443,33 +443,15 @@ export default function App() {
   const exhibitedSet = useMemo(() => {
     const set = new Set<string>();
     for (const row of auxData) {
-      for (const key in row) {
-        if (key !== '_searchString') {
-          const val = String(row[key] ?? '').trim().toLowerCase();
-          if (val) set.add(val);
-        }
+      const sku = String(row['sku'] ?? '').trim().toLowerCase();
+      const linea = String(row['linea'] ?? '').trim().toLowerCase();
+      const marca = String(row['marca'] ?? '').trim().toLowerCase();
+      if (sku || linea || marca) {
+        set.add(`${sku}|${linea}|${marca}`);
       }
     }
     return set;
   }, [auxData]);
-
-  const checkIsExhibited = useCallback((row: ProductRow) => {
-    if (exhibitedSet.size === 0) return false;
-    
-    const sku = String(row['sku'] ?? '').trim().toLowerCase();
-    const modelo = String(row['modelo'] ?? '').trim().toLowerCase();
-    const upc = String(row['upc'] ?? '').trim().toLowerCase();
-    const marca = String(row['marca'] ?? '').trim().toLowerCase();
-    const linea = String(row['linea'] ?? '').trim().toLowerCase();
-    
-    if (sku && exhibitedSet.has(sku)) return true;
-    if (modelo && exhibitedSet.has(modelo)) return true;
-    if (upc && exhibitedSet.has(upc)) return true;
-    if (marca && exhibitedSet.has(marca)) return true;
-    if (linea && exhibitedSet.has(linea)) return true;
-    
-    return false;
-  }, [exhibitedSet]);
 
   const resetFilters = () => {
     setGlobalSearch('');
@@ -509,14 +491,13 @@ export default function App() {
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
       if (locationFilter !== 'all') {
-        const isExhibited = checkIsExhibited(row);
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
         if (locationFilter === 'exhibited' && !isExhibited) return false;
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
 
-      for (const colKey in columnSearchTags) {
-        const tags = columnSearchTags[colKey];
-        if (tags && tags.length > 0) {
+      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
+        if (tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let tagMatched = false;
           for (const tag of tags) {
@@ -530,9 +511,8 @@ export default function App() {
         }
       }
 
-      for (const colKey in columnFilters) {
-        const selectedSet = columnFilters[colKey];
-        if (selectedSet && selectedSet.size > 0) {
+      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
+        if (selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
           if (!selectedSet.has(rowVal)) {
             return false;
@@ -562,15 +542,14 @@ export default function App() {
     for (const row of baseData) {
       let passesLocation = true;
       if (locationFilter !== 'all') {
-        const isExhibited = checkIsExhibited(row);
+        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
         if (locationFilter === 'exhibited' && !isExhibited) passesLocation = false;
         if (locationFilter === 'bodega' && isExhibited) passesLocation = false;
       }
 
       let passesTags = true;
-      for (const colKey in columnSearchTags) {
-        const tags = columnSearchTags[colKey];
-        if (tags && tags.length > 0) {
+      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
+        if (tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let tagMatched = false;
           for (const tag of tags) {
@@ -600,9 +579,8 @@ export default function App() {
       }
 
       const failedCheckboxes = [];
-      for (const colKey in columnFilters) {
-        const selectedSet = columnFilters[colKey];
-        if (selectedSet && selectedSet.size > 0) {
+      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
+        if (selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
           if (!selectedSet.has(rowVal)) {
             failedCheckboxes.push(colKey);
@@ -831,7 +809,7 @@ export default function App() {
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {currentData.length > 0 ? (
                       currentData.map((row, idx) => {
-                        const isExhibited = checkIsExhibited(row);
+                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['linea'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
                         
                         const cantidadRaw = row['cantidad'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
