@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
@@ -514,8 +514,9 @@ export default function App() {
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
 
-      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
-        if (tags.length > 0) {
+      for (const colKey in columnSearchTags) {
+        const tags = columnSearchTags[colKey];
+        if (tags && tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let tagMatched = false;
           for (const tag of tags) {
@@ -529,8 +530,9 @@ export default function App() {
         }
       }
 
-      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
-        if (selectedSet.size > 0) {
+      for (const colKey in columnFilters) {
+        const selectedSet = columnFilters[colKey];
+        if (selectedSet && selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
           if (!selectedSet.has(rowVal)) {
             return false;
@@ -566,8 +568,9 @@ export default function App() {
       }
 
       let passesTags = true;
-      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
-        if (tags.length > 0) {
+      for (const colKey in columnSearchTags) {
+        const tags = columnSearchTags[colKey];
+        if (tags && tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let tagMatched = false;
           for (const tag of tags) {
@@ -597,8 +600,9 @@ export default function App() {
       }
 
       const failedCheckboxes = [];
-      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
-        if (selectedSet.size > 0) {
+      for (const colKey in columnFilters) {
+        const selectedSet = columnFilters[colKey];
+        if (selectedSet && selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
           if (!selectedSet.has(rowVal)) {
             failedCheckboxes.push(colKey);
