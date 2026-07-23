@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
@@ -6,9 +6,22 @@ import { ProductRow } from './types';
 
 function LocationDropdown({ isExhibited, onSelect }: { isExhibited: boolean, onSelect: (loc: 'exhibited' | 'bodega') => void }) {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
 
   return (
-    <div className="relative inline-flex items-center">
+    <div className="relative inline-flex items-center" ref={dropdownRef}>
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
         className="p-0.5 rounded transition-colors hover:bg-gray-100"
@@ -78,7 +91,22 @@ function FilterableHeader({
   const [copied, setCopied] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [actionPrefixText, setActionPrefixText] = useState('');
-  
+  const headerRef = useRef<HTMLTableCellElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setShowActionMenu(false);
+        setShowSuggestions(false);
+      }
+    };
+    if (isOpen || showActionMenu || showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, showActionMenu, showSuggestions]);
+
   const selected = columnFilters[columnKey] || new Set();
   const tags = columnSearchTags[columnKey] || [];
   
@@ -139,7 +167,7 @@ function FilterableHeader({
   };
 
   return (
-    <th className="px-4 py-3 font-medium relative select-none align-top min-w-[150px]">
+    <th className="px-4 py-3 font-medium relative select-none align-top min-w-[150px]" ref={headerRef}>
       <div className="flex items-center justify-between mb-2">
         <div 
           className="flex items-center space-x-1 cursor-pointer hover:text-blue-600 inline-flex"
@@ -168,8 +196,6 @@ function FilterableHeader({
                 {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Share className="h-4 w-4" />}
               </button>
               {showActionMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setShowActionMenu(false); }}></div>
                   <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-xl rounded-md z-20 flex flex-col font-normal text-gray-900 normal-case cursor-default p-3" onClick={(e) => e.stopPropagation()}>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">Texto inicial (opcional)</label>
                     <textarea 
@@ -196,7 +222,6 @@ function FilterableHeader({
                       </button>
                     </div>
                   </div>
-                </>
               )}
             </div>
           ) : (
@@ -297,8 +322,6 @@ function FilterableHeader({
       </div>
       
       {isOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
           <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-96 flex flex-col font-normal text-gray-900 normal-case">
             <div className="p-2 border-b border-gray-100 font-semibold text-xs text-gray-700 bg-gray-50 rounded-t-md">
               <span>Filtrar valores únicos</span>
@@ -325,7 +348,6 @@ function FilterableHeader({
               )}
             </div>
           </div>
-        </>
       )}
     </th>
   );
@@ -563,7 +585,7 @@ export default function App() {
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
 
-      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
+      for (const colKey in columnSearchTags) { const tags = columnSearchTags[colKey];
         if (tags.length > 0) {
           const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           let tagMatched = false;
@@ -578,7 +600,7 @@ export default function App() {
         }
       }
 
-      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
+      for (const colKey in columnFilters) { const selectedSet = columnFilters[colKey];
         if (selectedSet.size > 0) {
           const rowVal = String(row[colKey] ?? '');
           if (!selectedSet.has(rowVal)) {
