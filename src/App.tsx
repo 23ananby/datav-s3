@@ -4,6 +4,47 @@ import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
+function LocationDropdown({ isExhibited, onSelect }: { isExhibited: boolean, onSelect: (loc: 'exhibited' | 'bodega') => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        className="p-0.5 rounded transition-colors hover:bg-gray-100"
+        title="Cambiar ubicación"
+      >
+        {isExhibited ? (
+          <Store className="h-4 w-4 text-blue-600 shrink-0" title="En exhibición en tienda" />
+        ) : (
+          <Warehouse className="h-4 w-4 text-amber-600 shrink-0" title="En bodega" />
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-gray-200 rounded shadow-lg z-50 py-1"
+             onClick={(e) => e.stopPropagation()}
+        >
+          <button 
+            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center space-x-2 ${isExhibited ? 'font-semibold bg-gray-50' : ''}`}
+            onClick={() => { onSelect('exhibited'); setIsOpen(false); }}
+          >
+            <Store className="h-3.5 w-3.5 text-blue-600" />
+            <span>Tienda</span>
+          </button>
+          <button 
+            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center space-x-2 ${!isExhibited ? 'font-semibold bg-gray-50' : ''}`}
+            onClick={() => { onSelect('bodega'); setIsOpen(false); }}
+          >
+            <Warehouse className="h-3.5 w-3.5 text-amber-600" />
+            <span>Bodega</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilterableHeader({ 
   title, 
   columnKey, 
@@ -188,7 +229,15 @@ function FilterableHeader({
             onSubmit={(e) => {
               e.preventDefault();
               if (tagInput.trim()) {
-                addColumnSearchTag(columnKey, tagInput.trim());
+                const term = tagInput.trim();
+                const exactMatch = uniqueValues.find(v => v.toLowerCase() === term.toLowerCase());
+                if (exactMatch) {
+                  if (!selected.has(exactMatch)) {
+                    toggleColumnFilter(columnKey, exactMatch);
+                  }
+                } else {
+                  addColumnSearchTag(columnKey, term);
+                }
                 setTagInput('');
                 setShowSuggestions(false);
               }
@@ -221,7 +270,9 @@ function FilterableHeader({
                     className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 focus:bg-gray-100 truncate"
                     onClick={() => {
                       setTagInput('');
-                      addColumnSearchTag(columnKey, v);
+                      if (!selected.has(v)) {
+                        toggleColumnFilter(columnKey, v);
+                      }
                       setShowSuggestions(false);
                     }}
                   >
@@ -298,6 +349,7 @@ export default function App() {
   const [columnSearchTags, setColumnSearchTags] = useState<Record<string, string[]>>({});
   const [locationFilter, setLocationFilter] = useState<'all' | 'exhibited' | 'bodega'>('all');
   const [cantidadColorFilter, setCantidadColorFilter] = useState<'all' | 'green' | 'yellow' | 'red'>('all');
+  const [manualLocations, setManualLocations] = useState<Record<string, 'exhibited' | 'bodega'>>({});
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -310,6 +362,7 @@ export default function App() {
         const storedFileName = await get('app-fileName');
         const storedAuxData = await get('app-auxData');
         const storedAuxFileName = await get('app-auxFileName');
+        const storedManualLocations = await get('app-manualLocations');
         
         if (storedData && storedFileName) {
           setData(storedData);
@@ -320,6 +373,10 @@ export default function App() {
           setAuxData(storedAuxData);
           setAuxFileName(storedAuxFileName);
         }
+        
+        if (storedManualLocations) {
+          setManualLocations(storedManualLocations);
+        }
       } catch (error) {
         console.error('Failed to restore from IndexedDB', error);
       } finally {
@@ -329,6 +386,15 @@ export default function App() {
     
     restoreState();
   }, []);
+
+  const handleSetManualLocation = (productKey: string, loc: 'exhibited' | 'bodega') => {
+    setManualLocations(prev => {
+      const newLocs = { ...prev };
+      newLocs[productKey] = loc;
+      set('app-manualLocations', newLocs).catch(console.error);
+      return newLocs;
+    });
+  };
 
   const toggleColumnFilter = (columnKey: string, value: string) => {
     setColumnFilters(prev => {
@@ -490,7 +556,9 @@ export default function App() {
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
       if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+        const productKey = `${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`;
+        const manualLoc = manualLocations[productKey];
+        const isExhibited = manualLoc ? manualLoc === 'exhibited' : exhibitedSet.has(productKey);
         if (locationFilter === 'exhibited' && !isExhibited) return false;
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
@@ -531,75 +599,25 @@ export default function App() {
 
       return true;
     });
-  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter]);
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter, manualLocations]);
 
   const facetCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {
       nombre: {}, linea: {}, marca: {}, cantidad: {}, tags: {}, modelo: {}, sku: {}, upc: {}
     };
 
+    const columns = ['nombre', 'linea', 'marca', 'cantidad', 'tags', 'modelo', 'sku', 'upc'];
     for (const row of baseData) {
-      let passesLocation = true;
-      if (locationFilter !== 'all') {
-        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
-        if (locationFilter === 'exhibited' && !isExhibited) passesLocation = false;
-        if (locationFilter === 'bodega' && isExhibited) passesLocation = false;
-      }
-
-      let passesTags = true;
-      for (const [colKey, tags] of Object.entries(columnSearchTags)) {
-        if (tags.length > 0) {
-          const rowVal = String(row[colKey] ?? '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          let tagMatched = false;
-          for (const tag of tags) {
-            const normalizedTag = tag.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            if (rowVal.includes(normalizedTag)) {
-              tagMatched = true;
-              break;
-            }
-          }
-          if (!tagMatched) {
-            passesTags = false;
-            break;
-          }
-        }
-      }
-
-      if (!passesLocation || !passesTags) continue;
-
-      if (cantidadColorFilter !== 'all') {
-        const cantidadRaw = row['cantidad'];
-        const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
-        const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
-        
-        if (cantidadColorFilter === 'green' && cantidadVal <= 1) continue;
-        if (cantidadColorFilter === 'yellow' && cantidadVal !== 1) continue;
-        if (cantidadColorFilter === 'red' && cantidadVal >= 1) continue;
-      }
-
-      const failedCheckboxes = [];
-      for (const [colKey, selectedSet] of Object.entries(columnFilters)) {
-        if (selectedSet.size > 0) {
-          const rowVal = String(row[colKey] ?? '');
-          if (!selectedSet.has(rowVal)) {
-            failedCheckboxes.push(colKey);
-          }
-        }
-      }
-
-      const columns = ['nombre', 'linea', 'marca', 'cantidad', 'tags', 'modelo', 'sku', 'upc'];
       for (const col of columns) {
-        if (failedCheckboxes.length === 0 || (failedCheckboxes.length === 1 && failedCheckboxes[0] === col)) {
-          const val = String(row[col] ?? '');
-          if (val) {
-            counts[col][val] = (counts[col][val] || 0) + 1;
-          }
+        const val = String(row[col] ?? '');
+        if (val) {
+          counts[col][val] = (counts[col][val] || 0) + 1;
         }
       }
     }
 
     return counts;
-  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter]);
+  }, [baseData]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -808,7 +826,9 @@ export default function App() {
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {currentData.length > 0 ? (
                       currentData.map((row, idx) => {
-                        const isExhibited = exhibitedSet.has(`${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`);
+                        const productKey = `${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`;
+                        const manualLoc = manualLocations[productKey];
+                        const isExhibited = manualLoc ? manualLoc === 'exhibited' : exhibitedSet.has(productKey);
                         
                         const cantidadRaw = row['cantidad'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
@@ -839,12 +859,11 @@ export default function App() {
                                     <Search className="h-3.5 w-3.5" />
                                   </button>
                                 )}
+                                <LocationDropdown 
+                                  isExhibited={isExhibited}
+                                  onSelect={(loc) => handleSetManualLocation(productKey, loc)}
+                                />
                                 <span>{row['nombre'] || '-'}</span>
-                                {isExhibited ? (
-                                  <Store className="h-4 w-4 text-blue-600 shrink-0" title="En exhibición en tienda" />
-                                ) : (
-                                  <Warehouse className="h-4 w-4 text-amber-600 shrink-0" title="En bodega" />
-                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">{row['linea'] || '-'}</td>
