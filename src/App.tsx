@@ -70,7 +70,8 @@ function FilterableHeader({
   addColumnSearchTag,
   removeColumnSearchTag,
   cantidadColorFilter,
-  setCantidadColorFilter
+  setCantidadColorFilter,
+  selectedRowKeys
 }: {
   title: string;
   columnKey: string;
@@ -84,6 +85,7 @@ function FilterableHeader({
   removeColumnSearchTag: (col: string, tag: string) => void;
   cantidadColorFilter?: 'all' | 'green' | 'yellow' | 'red';
   setCantidadColorFilter?: (val: 'all' | 'green' | 'yellow' | 'red') => void;
+  selectedRowKeys?: Set<string>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -118,9 +120,20 @@ function FilterableHeader({
   
   const hasFilters = selected.size > 0 || tags.length > 0;
 
+  const getRowsToProcess = () => {
+    if (selectedRowKeys && selectedRowKeys.size > 0) {
+      return filteredData.filter(row => {
+        const productKey = `${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`;
+        return selectedRowKeys.has(productKey);
+      });
+    }
+    return filteredData;
+  };
+
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const values = filteredData.map(row => row[columnKey]).filter(val => val != null && val !== '');
+    const rowsToProcess = getRowsToProcess();
+    const values = rowsToProcess.map(row => row[columnKey]).filter(val => val != null && val !== '');
     let textToCopy = values.join('\n');
     
     if (textToCopy) {
@@ -136,7 +149,8 @@ function FilterableHeader({
 
   const handleSearch = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const values = filteredData.map(row => row[columnKey]).filter(val => val != null && val !== '');
+    const rowsToProcess = getRowsToProcess();
+    const values = rowsToProcess.map(row => row[columnKey]).filter(val => val != null && val !== '');
     let textToSearch = values.join('\n');
     
     if (textToSearch && columnKey === 'nombre') {
@@ -372,6 +386,7 @@ export default function App() {
   const [locationFilter, setLocationFilter] = useState<'all' | 'exhibited' | 'bodega'>('all');
   const [cantidadColorFilter, setCantidadColorFilter] = useState<'all' | 'green' | 'yellow' | 'red'>('all');
   const [manualLocations, setManualLocations] = useState<Record<string, 'exhibited' | 'bodega'>>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -415,6 +430,18 @@ export default function App() {
       newLocs[productKey] = loc;
       set('app-manualLocations', newLocs).catch(console.error);
       return newLocs;
+    });
+  };
+
+  const toggleRowSelection = (productKey: string) => {
+    setSelectedRowKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(productKey)) {
+        next.delete(productKey);
+      } else {
+        next.add(productKey);
+      }
+      return next;
     });
   };
 
@@ -776,7 +803,21 @@ export default function App() {
 
             {/* Results Count & Pagination top */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-gray-600">
-              <p>Mostrando {filteredData.length} resultados de {data.length}</p>
+              <div className="flex items-center space-x-3">
+                <p>Mostrando {filteredData.length} resultados de {data.length}</p>
+                {selectedRowKeys.size > 0 && (
+                  <div className="flex items-center space-x-2 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                    <span>{selectedRowKeys.size} seleccionados</span>
+                    <button 
+                      onClick={() => setSelectedRowKeys(new Set())}
+                      className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                      title="Limpiar selección"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
               
               <div className="flex items-center space-x-4">
                 <div className="flex bg-white rounded border border-gray-200 shadow-sm p-0.5">
@@ -835,14 +876,14 @@ export default function App() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                     <tr>
-                      <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} />
-                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
-                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} />
+                      <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
@@ -856,6 +897,8 @@ export default function App() {
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
                         const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
                         
+                        const isSelected = selectedRowKeys.has(productKey);
+                        
                         let rowColorClass = 'hover:bg-gray-50';
                         if (cantidadVal > 1) {
                           rowColorClass = 'bg-emerald-50/60 hover:bg-emerald-100/60';
@@ -865,8 +908,22 @@ export default function App() {
                           rowColorClass = 'bg-red-50/60 hover:bg-red-100/60';
                         }
                         
+                        if (isSelected) {
+                          rowColorClass = 'bg-blue-100 hover:bg-blue-200 outline outline-2 outline-blue-500 -outline-offset-2 z-10 relative cursor-pointer';
+                        } else {
+                          rowColorClass += ' cursor-pointer';
+                        }
+                        
                         return (
-                          <tr key={idx} className={`transition-colors ${rowColorClass}`}>
+                          <tr 
+                            key={idx} 
+                            className={`transition-colors ${rowColorClass}`}
+                            onClick={(e) => {
+                              const selection = window.getSelection();
+                              if (selection && selection.toString().length > 0) return;
+                              toggleRowSelection(productKey);
+                            }}
+                          >
                             <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">
                               <div className="flex items-center space-x-2">
                                 {row['nombre'] && (
