@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share, Image as ImageIcon } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
@@ -927,16 +927,28 @@ export default function App() {
                             <td className="px-4 py-3 font-medium text-gray-900 min-w-[200px]">
                               <div className="flex items-center space-x-2">
                                 {row['nombre'] && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      window.open(`https://www.google.com/search?q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
-                                    }}
-                                    className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
-                                    title="Buscar producto en Google"
-                                  >
-                                    <Search className="h-3.5 w-3.5" />
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(`https://www.google.com/search?q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
+                                      }}
+                                      className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
+                                      title="Buscar producto en Google"
+                                    >
+                                      <Search className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
+                                      }}
+                                      className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
+                                      title="Buscar imágenes en Google"
+                                    >
+                                      <ImageIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
                                 )}
                                 <LocationDropdown 
                                   isExhibited={isExhibited}
