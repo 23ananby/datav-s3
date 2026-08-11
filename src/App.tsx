@@ -948,6 +948,19 @@ export default function App() {
                                     >
                                       <ImageIcon className="h-3.5 w-3.5" />
                                     </button>
+                                    {row['sku'] && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const sku = String(row['sku']).trim();
+                                          window.open(`https://electronicapanamericana.com/?s=${encodeURIComponent(sku)}&post_type=product&dgwt_wcas=1`, '_blank', 'noopener,noreferrer');
+                                        }}
+                                        className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
+                                        title="Buscar en Electrónica Panamericana"
+                                      >
+                                        <Store className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </>
                                 )}
                                 <LocationDropdown 
