@@ -4,6 +4,21 @@ import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
 
+function openInBackgroundTab(url: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  const evt = new MouseEvent('click', {
+    view: window,
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: true,
+    metaKey: true
+  });
+  a.dispatchEvent(evt);
+}
+
 function LocationDropdown({ isExhibited, onSelect }: { isExhibited: boolean, onSelect: (loc: 'exhibited' | 'bodega') => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -158,7 +173,7 @@ function FilterableHeader({
         textToSearch = `${actionPrefixText.trim()}\n\n${textToSearch}`;
       }
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(textToSearch)}`;
-      window.open(searchUrl, '_blank', 'noopener,noreferrer');
+      openInBackgroundTab(searchUrl);
       setShowActionMenu(false);
     }
   };
@@ -931,7 +946,7 @@ export default function App() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        window.open(`https://www.google.com/search?q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
+                                        openInBackgroundTab(`https://www.google.com/search?q=${encodeURIComponent(row['nombre'])}`);
                                       }}
                                       className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
                                       title="Buscar producto en Google"
@@ -941,7 +956,7 @@ export default function App() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(row['nombre'])}`, '_blank', 'noopener,noreferrer');
+                                        openInBackgroundTab(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(row['nombre'])}`);
                                       }}
                                       className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
                                       title="Buscar imágenes en Google"
@@ -953,7 +968,7 @@ export default function App() {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           const sku = String(row['sku']).trim();
-                                          window.open(`https://electronicapanamericana.com/?s=${encodeURIComponent(sku)}&post_type=product&dgwt_wcas=1`, '_blank', 'noopener,noreferrer');
+                                          openInBackgroundTab(`https://electronicapanamericana.com/?s=${encodeURIComponent(sku)}&post_type=product&dgwt_wcas=1`);
                                         }}
                                         className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition-colors shrink-0"
                                         title="Buscar en Electrónica Panamericana"
