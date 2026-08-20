@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, Search, FileSpreadsheet, X, ChevronLeft, ChevronRight, Filter, RefreshCw, Copy, Check, Store, Warehouse, ExternalLink, Share, Image as ImageIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { parseExcelFile } from './utils';
 import { ProductRow } from './types';
@@ -86,7 +86,9 @@ function FilterableHeader({
   removeColumnSearchTag,
   cantidadColorFilter,
   setCantidadColorFilter,
-  selectedRowKeys
+  selectedRowKeys,
+  sortConfig,
+  requestSort
 }: {
   title: string;
   columnKey: string;
@@ -101,6 +103,8 @@ function FilterableHeader({
   cantidadColorFilter?: 'all' | 'green' | 'yellow' | 'red';
   setCantidadColorFilter?: (val: 'all' | 'green' | 'yellow' | 'red') => void;
   selectedRowKeys?: Set<string>;
+  sortConfig?: { key: string; direction: 'asc' | 'desc' } | null;
+  requestSort?: (key: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -206,6 +210,19 @@ function FilterableHeader({
           <Filter className={`h-3.5 w-3.5 ${hasFilters ? 'text-blue-600 fill-blue-100' : 'text-gray-400'}`} />
         </div>
         <div className="flex items-center space-x-1">
+          {requestSort && (
+            <button
+              onClick={(e) => { e.stopPropagation(); requestSort(columnKey); }}
+              className={`p-1 rounded transition-colors ${sortConfig?.key === columnKey ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+              title="Ordenar alfabéticamente"
+            >
+              {sortConfig?.key === columnKey ? (
+                sortConfig.direction === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowUpDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
           {columnKey === 'cantidad' && setCantidadColorFilter && (
             <button
               onClick={handleCantidadColorToggle}
@@ -402,6 +419,17 @@ export default function App() {
   const [cantidadColorFilter, setCantidadColorFilter] = useState<'all' | 'green' | 'yellow' | 'red'>('all');
   const [manualLocations, setManualLocations] = useState<Record<string, 'exhibited' | 'bodega'>>({});
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  const requestSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev && prev.key === key) {
+        if (prev.direction === 'asc') return { key, direction: 'desc' };
+        return null; // clear sorting
+      }
+      return { key, direction: 'asc' };
+    });
+  };
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -683,12 +711,31 @@ export default function App() {
     return counts;
   }, [baseData]);
 
+  const sortedData = useMemo(() => {
+    if (!sortConfig) return filteredData;
+    return [...filteredData].sort((a, b) => {
+      const aVal = a[sortConfig.key] ?? '';
+      const bVal = b[sortConfig.key] ?? '';
+      
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      
+      if (aStr < bStr) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aStr > bStr) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredData, sortConfig]);
+
   // Pagination Logic
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   const currentData = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(start, start + rowsPerPage);
-  }, [filteredData, currentPage]);
+    return sortedData.slice(start, start + rowsPerPage);
+  }, [sortedData, currentPage]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -891,14 +938,14 @@ export default function App() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
                     <tr>
-                      <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
-                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} />
+                      <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
