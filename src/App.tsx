@@ -589,7 +589,7 @@ export default function App() {
     setBodegaCentralFileName(file.name);
 
     try {
-      const parsedData = await parseExcelFile(file);
+      const parsedData = await parseExcelFile(file, true);
       setBodegaCentralData(parsedData);
       set('app-bodegaCentralData', parsedData).catch(console.error);
       set('app-bodegaCentralFileName', file.name).catch(console.error);
