@@ -409,6 +409,11 @@ export default function App() {
   const [auxFileName, setAuxFileName] = useState<string>('');
   const [isParsingAux, setIsParsingAux] = useState(false);
 
+  const [bodegaCentralData, setBodegaCentralData] = useState<ProductRow[]>([]);
+  const [bodegaCentralFileName, setBodegaCentralFileName] = useState<string>('');
+  const [isParsingBodegaCentral, setIsParsingBodegaCentral] = useState(false);
+  const [viewMode, setViewMode] = useState<'all' | 'tienda' | 'central' | 'tienda_only' | 'central_only'>('all');
+
   const [error, setError] = useState<string | null>(null);
 
   // Filters
@@ -442,6 +447,8 @@ export default function App() {
         const storedFileName = await get('app-fileName');
         const storedAuxData = await get('app-auxData');
         const storedAuxFileName = await get('app-auxFileName');
+        const storedBodegaCentralData = await get('app-bodegaCentralData');
+        const storedBodegaCentralFileName = await get('app-bodegaCentralFileName');
         const storedManualLocations = await get('app-manualLocations');
         
         if (storedData && storedFileName) {
@@ -452,6 +459,11 @@ export default function App() {
         if (storedAuxData && storedAuxFileName) {
           setAuxData(storedAuxData);
           setAuxFileName(storedAuxFileName);
+        }
+
+        if (storedBodegaCentralData && storedBodegaCentralFileName) {
+          setBodegaCentralData(storedBodegaCentralData);
+          setBodegaCentralFileName(storedBodegaCentralFileName);
         }
         
         if (storedManualLocations) {
@@ -564,6 +576,39 @@ export default function App() {
     }
   };
 
+  
+  const handleBodegaCentralFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.xlsx')) {
+      setError('Por favor sube un archivo .xlsx válido para la bodega central.');
+      return;
+    }
+    setIsParsingBodegaCentral(true);
+    setError(null);
+    setBodegaCentralFileName(file.name);
+
+    try {
+      const parsedData = await parseExcelFile(file);
+      setBodegaCentralData(parsedData);
+      set('app-bodegaCentralData', parsedData).catch(console.error);
+      set('app-bodegaCentralFileName', file.name).catch(console.error);
+    } catch (err) {
+      console.error(err);
+      setError('Hubo un error al procesar el archivo de bodega central.');
+      setBodegaCentralData([]);
+    } finally {
+      setIsParsingBodegaCentral(false);
+    }
+  };
+
+  const removeBodegaCentralFile = () => {
+    setBodegaCentralData([]);
+    setBodegaCentralFileName('');
+    del('app-bodegaCentralData').catch(console.error);
+    del('app-bodegaCentralFileName').catch(console.error);
+  };
+
   const handleAuxFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -623,27 +668,63 @@ export default function App() {
     setCurrentPage(1);
   };
 
+  const unifiedData = useMemo(() => {
+    const map = new Map<string, ProductRow & { cantidadTienda?: number; cantidadCentral?: number; source?: 'tienda' | 'central' | 'ambos' }>();
+
+    for (const row of data) {
+      const sku = String(row['sku'] ?? '').trim().toLowerCase();
+      const marca = String(row['marca'] ?? '').trim().toLowerCase();
+      const key = `${sku}|${marca}`;
+      map.set(key, { ...row, cantidadTienda: row['cantidad'], source: 'tienda' });
+    }
+
+    for (const row of bodegaCentralData) {
+      const sku = String(row['sku'] ?? '').trim().toLowerCase();
+      const marca = String(row['marca'] ?? '').trim().toLowerCase();
+      const key = `${sku}|${marca}`;
+      
+      if (map.has(key)) {
+        const existing = map.get(key)!;
+        existing.cantidadCentral = row['cantidad'];
+        existing.source = 'ambos';
+      } else {
+        map.set(key, { ...row, cantidadCentral: row['cantidad'], source: 'central' });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [data, bodegaCentralData]);
+
   const baseData = useMemo(() => {
-    if (!globalSearch.trim()) return data;
+    let currentMatches = [...unifiedData];
+    
+    if (viewMode === 'tienda') {
+      currentMatches = currentMatches.filter(r => r.source === 'tienda' || r.source === 'ambos');
+    } else if (viewMode === 'central') {
+      currentMatches = currentMatches.filter(r => r.source === 'central' || r.source === 'ambos');
+    } else if (viewMode === 'tienda_only') {
+      currentMatches = currentMatches.filter(r => r.source === 'tienda');
+    } else if (viewMode === 'central_only') {
+      currentMatches = currentMatches.filter(r => r.source === 'central');
+    }
+
+    if (!globalSearch.trim()) return currentMatches;
 
     const searchTerms = globalSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).filter(Boolean);
-    
-    let currentMatches = [...data];
     
     for (const term of searchTerms) {
       const nextMatches = currentMatches.filter(row => {
         const searchStr = row._searchString || '';
         return searchStr.includes(term);
       });
-      
-      // Búsqueda inteligente: Si un término no existe en ninguna parte de los resultados restantes (ej. un error de tipeo), 
-      // lo ignoramos en vez de borrar toda la lista. Así no se pierden los resultados por una palabra extraña.
       if (nextMatches.length > 0) {
         currentMatches = nextMatches;
+      } else {
+        return [];
       }
     }
     return currentMatches;
-  }, [data, globalSearch]);
+  }, [unifiedData, globalSearch, viewMode]);
 
   const filteredData = useMemo(() => {
     return baseData.filter(row => {
@@ -680,7 +761,7 @@ export default function App() {
       }
       
       if (cantidadColorFilter !== 'all') {
-        const cantidadRaw = row['cantidad'];
+        const cantidadRaw = row['cantidadTienda'];
         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
         const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
         
@@ -695,10 +776,10 @@ export default function App() {
 
   const facetCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {
-      nombre: {}, linea: {}, marca: {}, cantidad: {}, tags: {}, modelo: {}, sku: {}, upc: {}
+      nombre: {}, linea: {}, marca: {}, cantidadTienda: {}, cantidadCentral: {}, tags: {}, modelo: {}, sku: {}, upc: {}
     };
 
-    const columns = ['nombre', 'linea', 'marca', 'cantidad', 'tags', 'modelo', 'sku', 'upc'];
+    const columns = ['nombre', 'linea', 'marca', 'cantidadTienda', 'cantidadCentral', 'tags', 'modelo', 'sku', 'upc'];
     for (const row of baseData) {
       for (const col of columns) {
         const val = String(row[col] ?? '');
@@ -804,8 +885,40 @@ export default function App() {
               </div>
             )}
 
+            
+            {/* Bodega Central Upload Area */}
+            {!bodegaCentralData.length && !isParsingBodegaCentral && (
+              <label className="relative flex cursor-pointer items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 hover:bg-gray-50 transition-colors shadow-sm">
+                <div className="flex items-center space-x-2">
+                  <Warehouse className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Subir Bodega Central</span>
+                </div>
+                <input type="file" accept=".xlsx" className="sr-only" onChange={handleBodegaCentralFileUpload} />
+              </label>
+            )}
+
+            {isParsingBodegaCentral && (
+              <div className="flex items-center space-x-2 px-4 py-2 bg-white rounded-md border border-gray-200 shadow-sm">
+                <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
+                <span className="text-sm text-gray-600">Procesando...</span>
+              </div>
+            )}
+
+            {bodegaCentralData.length > 0 && (
+              <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm border-l-4 border-l-purple-500">
+                <Warehouse className="h-5 w-5 text-purple-500" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">Bodega Central</span>
+                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{bodegaCentralFileName}</span>
+                </div>
+                <button onClick={removeBodegaCentralFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar bodega central">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {/* Aux Upload Area */}
-            {data.length > 0 && !auxData.length && !isParsingAux && (
+            {(data.length > 0 || bodegaCentralData.length > 0) && !auxData.length && !isParsingAux && (
               <label className="relative flex cursor-pointer items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 hover:bg-gray-50 transition-colors shadow-sm">
                 <div className="flex items-center space-x-2">
                   <Store className="h-4 w-4 text-gray-500" />
@@ -844,7 +957,7 @@ export default function App() {
         )}
 
         {/* Main Content Area */}
-        {data.length > 0 && (
+        {unifiedData.length > 0 && (
           <div className="space-y-4">
             
             {/* Search Box */}
@@ -866,7 +979,7 @@ export default function App() {
             {/* Results Count & Pagination top */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-gray-600">
               <div className="flex items-center space-x-3">
-                <p>Mostrando {filteredData.length} resultados de {data.length}</p>
+                <p>Mostrando {filteredData.length} resultados de {unifiedData.length}</p>
                 {selectedRowKeys.size > 0 && (
                   <div className="flex items-center space-x-2 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-xs font-medium">
                     <span>{selectedRowKeys.size} seleccionados</span>
@@ -882,6 +995,21 @@ export default function App() {
               </div>
               
               <div className="flex items-center space-x-4">
+
+              <div className="flex items-center space-x-2">
+                <select
+                  value={viewMode}
+                  onChange={(e) => setViewMode(e.target.value as any)}
+                  className="block rounded-md border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 bg-white border shadow-sm text-gray-700"
+                >
+                  <option value="all">Todas las bases de datos</option>
+                  <option value="tienda">Disponibles en Tienda</option>
+                  <option value="central">Disponibles en Bodega Central</option>
+                  <option value="tienda_only">Solo en Tienda (Falta Central)</option>
+                  <option value="central_only">Solo en Central (Falta Tienda)</option>
+                </select>
+              </div>
+
                 <div className="flex bg-white rounded border border-gray-200 shadow-sm p-0.5">
                   <button
                     onClick={() => setLocationFilter(prev => prev === 'exhibited' ? 'all' : 'exhibited')}
@@ -941,7 +1069,8 @@ export default function App() {
                       <FilterableHeader title="Nombre" columnKey="nombre" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['nombre']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Línea" columnKey="linea" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['linea']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
-                      <FilterableHeader title="Cantidad" columnKey="cantidad" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidad']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Cant. Tienda" columnKey="cantidadTienda" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidadTienda']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader title="Cant. Central" columnKey="cantidadCentral" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidadCentral']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
@@ -955,7 +1084,7 @@ export default function App() {
                         const manualLoc = manualLocations[productKey];
                         const isExhibited = manualLoc ? manualLoc === 'exhibited' : exhibitedSet.has(productKey);
                         
-                        const cantidadRaw = row['cantidad'];
+                        const cantidadRaw = row['cantidadTienda'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
                         const cantidadVal = isNaN(cantidadNum) ? 0 : cantidadNum;
                         
@@ -1034,7 +1163,8 @@ export default function App() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">{row['linea'] || '-'}</td>
                             <td className="px-4 py-3 whitespace-nowrap">{row['marca'] || '-'}</td>
-                            <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-600">{row['cantidad'] ?? '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-600">{row['cantidadTienda'] ?? '-'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap font-medium text-purple-600">{row['cantidadCentral'] ?? '-'}</td>
                             <td className="px-4 py-3 min-w-[200px] text-xs text-gray-500">{row['tags'] || '-'}</td>
                             <td className="px-4 py-3 whitespace-nowrap">{row['modelo'] || '-'}</td>
                             <td className="px-4 py-3 whitespace-nowrap text-xs">{row['sku'] || '-'}</td>
