@@ -242,13 +242,13 @@ function FilterableHeader({
                 {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Share className="h-4 w-4" />}
               </button>
               {showActionMenu && (
-                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-xl rounded-md z-20 flex flex-col font-normal text-gray-900 normal-case cursor-default p-3" onClick={(e) => e.stopPropagation()}>
+                  <div className={`absolute top-full ${alignRight ? 'right-0' : 'left-0'} mt-1 w-[85vw] sm:w-72 max-w-[300px] bg-white border border-gray-200 shadow-xl rounded-md z-20 flex flex-col font-normal text-gray-900 normal-case cursor-default p-3`} onClick={(e) => e.stopPropagation()}>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">Texto inicial (opcional)</label>
                     <textarea 
                       value={actionPrefixText}
                       onChange={(e) => setActionPrefixText(e.target.value)}
                       placeholder="Ej: comparativa de modelos..."
-                      className="w-full border border-gray-300 rounded text-xs p-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm resize-none"
+                      className="w-full border border-gray-300 rounded text-base sm:text-xs p-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm resize-none"
                       rows={2}
                     />
                     <div className="flex gap-2 mt-3">
@@ -326,7 +326,7 @@ function FilterableHeader({
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               placeholder="Filtro (+Enter)"
-              className="w-full border border-gray-300 rounded text-xs px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+              className="w-full border border-gray-300 rounded text-base sm:text-xs px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
             />
           </form>
           {showSuggestions && tagInput.trim() && (
@@ -368,7 +368,7 @@ function FilterableHeader({
       </div>
       
       {isOpen && (
-          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-96 flex flex-col font-normal text-gray-900 normal-case">
+          <div className={`absolute top-full ${alignRight ? 'right-0' : 'left-0'} mt-1 w-[85vw] sm:w-64 max-w-[300px] bg-white border border-gray-200 shadow-xl rounded-md z-20 max-h-96 flex flex-col font-normal text-gray-900 normal-case`}>
             <div className="p-2 border-b border-gray-100 font-semibold text-xs text-gray-700 bg-gray-50 rounded-t-md">
               <span>Filtrar valores únicos</span>
             </div>
@@ -843,7 +843,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="w-full max-w-[1920px] mx-auto space-y-6 px-1">
         
         {/* Header */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1000,7 +1000,7 @@ export default function App() {
                 <select
                   value={viewMode}
                   onChange={(e) => setViewMode(e.target.value as any)}
-                  className="block rounded-md border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 bg-white border shadow-sm text-gray-700"
+                  className="block rounded-md border-gray-300 py-1.5 pl-3 pr-8 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 bg-white border shadow-sm text-gray-700"
                 >
                   <option value="all">Todas las bases de datos</option>
                   <option value="tienda">Disponibles en Tienda</option>
@@ -1071,10 +1071,10 @@ export default function App() {
                       <FilterableHeader title="Marca" columnKey="marca" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['marca']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Cant. Tienda" columnKey="cantidadTienda" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidadTienda']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} cantidadColorFilter={cantidadColorFilter} setCantidadColorFilter={setCantidadColorFilter} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Cant. Central" columnKey="cantidadCentral" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['cantidadCentral']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
-                      <FilterableHeader title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader alignRight title="Tags" columnKey="tags" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['tags']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                       <FilterableHeader title="Modelo" columnKey="modelo" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['modelo']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
-                      <FilterableHeader title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
-                      <FilterableHeader title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader alignRight title="SKU" columnKey="sku" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['sku']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
+                      <FilterableHeader alignRight title="UPC" columnKey="upc" filteredData={filteredData} columnFilters={columnFilters} columnSearchTags={columnSearchTags} facetCounts={facetCounts['upc']} toggleColumnFilter={toggleColumnFilter} clearColumnFilter={clearColumnFilter} addColumnSearchTag={addColumnSearchTag} removeColumnSearchTag={removeColumnSearchTag} selectedRowKeys={selectedRowKeys} sortConfig={sortConfig} requestSort={requestSort} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
