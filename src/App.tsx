@@ -405,16 +405,15 @@ export default function App() {
   const [isParsing, setIsParsing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
   
-  const [auxData, setAuxData] = useState<ProductRow[]>([]);
-  const [auxFileName, setAuxFileName] = useState<string>('');
-  const [isParsingAux, setIsParsingAux] = useState(false);
-
+      
   const [bodegaCentralData, setBodegaCentralData] = useState<ProductRow[]>([]);
   const [bodegaCentralFileName, setBodegaCentralFileName] = useState<string>('');
   const [isParsingBodegaCentral, setIsParsingBodegaCentral] = useState(false);
   const [viewMode, setViewMode] = useState<'all' | 'tienda' | 'central' | 'tienda_only' | 'central_only'>('all');
 
   const [error, setError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
 
   // Filters
   const [globalSearch, setGlobalSearch] = useState('');
@@ -445,9 +444,7 @@ export default function App() {
       try {
         const storedData = await get('app-data');
         const storedFileName = await get('app-fileName');
-        const storedAuxData = await get('app-auxData');
-        const storedAuxFileName = await get('app-auxFileName');
-        const storedBodegaCentralData = await get('app-bodegaCentralData');
+                        const storedBodegaCentralData = await get('app-bodegaCentralData');
         const storedBodegaCentralFileName = await get('app-bodegaCentralFileName');
         const storedManualLocations = await get('app-manualLocations');
         
@@ -456,10 +453,6 @@ export default function App() {
           setFileName(storedFileName);
         }
         
-        if (storedAuxData && storedAuxFileName) {
-          setAuxData(storedAuxData);
-          setAuxFileName(storedAuxFileName);
-        }
 
         if (storedBodegaCentralData && storedBodegaCentralFileName) {
           setBodegaCentralData(storedBodegaCentralData);
@@ -548,6 +541,25 @@ export default function App() {
     });
   };
 
+  const handleDrag = function(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = function(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setDroppedFile(e.dataTransfer.files[0]);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -609,51 +621,7 @@ export default function App() {
     del('app-bodegaCentralFileName').catch(console.error);
   };
 
-  const handleAuxFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    if (!file.name.endsWith('.xlsx')) {
-      setError('Por favor sube un archivo .xlsx válido para la base auxiliar.');
-      return;
-    }
-
-    setIsParsingAux(true);
-    setError(null);
-    setAuxFileName(file.name);
-
-    try {
-      const parsedData = await parseExcelFile(file);
-      setAuxData(parsedData);
-      set('app-auxData', parsedData).catch(console.error);
-      set('app-auxFileName', file.name).catch(console.error);
-    } catch (err) {
-      console.error(err);
-      setError('Hubo un error al procesar el archivo auxiliar.');
-      setAuxData([]);
-    } finally {
-      setIsParsingAux(false);
-    }
-  };
-
-  const removeAuxFile = () => {
-    setAuxData([]);
-    setAuxFileName('');
-    del('app-auxData').catch(console.error);
-    del('app-auxFileName').catch(console.error);
-  };
-
-  const exhibitedSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const row of auxData) {
-      const sku = String(row['sku'] ?? '').trim().toLowerCase();
-      const marca = String(row['marca'] ?? '').trim().toLowerCase();
-      if (sku || marca) {
-        set.add(`${sku}|${marca}`);
-      }
-    }
-    return set;
-  }, [auxData]);
 
   const resetFilters = () => {
     setGlobalSearch('');
@@ -731,7 +699,7 @@ export default function App() {
       if (locationFilter !== 'all') {
         const productKey = `${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`;
         const manualLoc = manualLocations[productKey];
-        const isExhibited = manualLoc ? manualLoc === 'exhibited' : exhibitedSet.has(productKey);
+        const isExhibited = manualLoc === 'exhibited';
         if (locationFilter === 'exhibited' && !isExhibited) return false;
         if (locationFilter === 'bodega' && isExhibited) return false;
       }
@@ -772,7 +740,7 @@ export default function App() {
 
       return true;
     });
-  }, [baseData, columnFilters, columnSearchTags, locationFilter, exhibitedSet, cantidadColorFilter, manualLocations]);
+  }, [baseData, columnFilters, columnSearchTags, locationFilter, cantidadColorFilter, manualLocations]);
 
   const facetCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {
@@ -780,7 +748,7 @@ export default function App() {
     };
 
     const columns = ['nombre', 'linea', 'marca', 'cantidadTienda', 'cantidadCentral', 'tags', 'modelo', 'sku', 'upc'];
-    for (const row of baseData) {
+    for (const row of filteredData) {
       for (const col of columns) {
         const val = String(row[col] ?? '');
         if (val) {
@@ -790,7 +758,7 @@ export default function App() {
     }
 
     return counts;
-  }, [baseData]);
+  }, [filteredData]);
 
   const sortedData = useMemo(() => {
     if (!sortConfig) return filteredData;
@@ -842,7 +810,59 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-6 lg:p-8" onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}>
+      
+      {dragActive && (
+        <div className="fixed inset-0 z-50 bg-blue-500/20 border-4 border-dashed border-blue-500 pointer-events-none rounded-xl m-4 flex items-center justify-center">
+           <div className="bg-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
+              <UploadCloud className="h-8 w-8 text-blue-500" />
+              <span className="text-xl font-medium text-blue-700">Suelta el archivo aquí</span>
+           </div>
+        </div>
+      )}
+      {droppedFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">
+              ¿Este archivo es para Tienda o Bodega Central?
+            </h3>
+            <p className="text-sm text-gray-500 mb-6 text-center truncate" title={droppedFile.name}>
+              {droppedFile.name}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => {
+                  const ev = { target: { files: [droppedFile] } };
+                  handleFileUpload(ev as any);
+                  setDroppedFile(null);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded transition-colors flex items-center justify-center gap-2"
+              >
+                <Store className="h-5 w-5" />
+                Tienda (General)
+              </button>
+              <button 
+                onClick={() => {
+                  const ev = { target: { files: [droppedFile] } };
+                  handleBodegaCentralFileUpload(ev as any);
+                  setDroppedFile(null);
+                }}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition-colors flex items-center justify-center gap-2"
+              >
+                <Warehouse className="h-5 w-5" />
+                Bodega Central
+              </button>
+              <button 
+                onClick={() => setDroppedFile(null)}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-4 rounded transition-colors mt-2"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header */}
@@ -874,11 +894,8 @@ export default function App() {
             {data.length > 0 && (
               <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm">
                 <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">General</span>
-                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{fileName}</span>
-                </div>
-                <span className="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600">{data.length} filas</span>
+                <span className="text-sm font-semibold text-gray-700 hidden sm:inline">General</span>
+                <span className="text-xs px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-medium">{data.length}</span>
                 <button onClick={removeFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar base general">
                   <X className="h-4 w-4" />
                 </button>
@@ -907,46 +924,13 @@ export default function App() {
             {bodegaCentralData.length > 0 && (
               <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm border-l-4 border-l-purple-500">
                 <Warehouse className="h-5 w-5 text-purple-500" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">Bodega Central</span>
-                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{bodegaCentralFileName}</span>
-                </div>
+                <span className="text-sm font-semibold text-gray-700 hidden sm:inline">Bodega</span>
                 <button onClick={removeBodegaCentralFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar bodega central">
                   <X className="h-4 w-4" />
                 </button>
               </div>
             )}
 
-            {/* Aux Upload Area */}
-            {(data.length > 0 || bodegaCentralData.length > 0) && !auxData.length && !isParsingAux && (
-              <label className="relative flex cursor-pointer items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 hover:bg-gray-50 transition-colors shadow-sm">
-                <div className="flex items-center space-x-2">
-                  <Store className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">Subir Exhibición</span>
-                </div>
-                <input type="file" accept=".xlsx" className="sr-only" onChange={handleAuxFileUpload} />
-              </label>
-            )}
-
-            {isParsingAux && (
-              <div className="flex items-center space-x-2 px-4 py-2 bg-white rounded-md border border-gray-200 shadow-sm">
-                <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
-                <span className="text-sm text-gray-600">Procesando...</span>
-              </div>
-            )}
-
-            {auxData.length > 0 && (
-              <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-md border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
-                <Store className="h-5 w-5 text-blue-500" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">Exhibición</span>
-                  <span className="text-sm font-medium text-gray-700 truncate max-w-[150px] leading-none">{auxFileName}</span>
-                </div>
-                <button onClick={removeAuxFile} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-600 transition-colors" title="Quitar base de exhibición">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
           </div>
         </header>
 
@@ -994,7 +978,7 @@ export default function App() {
                 )}
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-wrap items-center gap-4">
 
               <div className="flex items-center space-x-2">
                 <select
@@ -1082,7 +1066,7 @@ export default function App() {
                       currentData.map((row, idx) => {
                         const productKey = `${String(row['sku'] ?? '').trim().toLowerCase()}|${String(row['marca'] ?? '').trim().toLowerCase()}`;
                         const manualLoc = manualLocations[productKey];
-                        const isExhibited = manualLoc ? manualLoc === 'exhibited' : exhibitedSet.has(productKey);
+                        const isExhibited = manualLoc === 'exhibited';
                         
                         const cantidadRaw = row['cantidadTienda'];
                         const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : parseFloat(String(cantidadRaw).replace(/,/g, ''));
